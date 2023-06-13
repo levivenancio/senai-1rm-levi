@@ -1,0 +1,91 @@
+#include <SPI.h>
+#include <UIPEthernet.h>
+#include <PubSubClient.h>
+#include "DHT.h"
+
+#define DHTPIN 2       // Pino de dados do sensor DHT11
+#define DHTTYPE DHT11   // DHT 11
+
+DHT dht(DHTPIN, DHTTYPE);
+
+// Configurações do Ethernet
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xB9 };  // Endereço MAC do Arduino
+IPAddress ip(172, 16, 32, 135);                      // Endereço IP do Arduino
+IPAddress server(172, 16, 32, 206);                   // Endereço IP do servidor MQTT
+
+// Configurações do MQTT
+const char* topic = "mesa7temperatura";  // Tópico MQTT para envio dos dados
+const char* clientID = "arduino";   // ID do cliente MQTT
+
+EthernetClient ethClient;
+PubSubClient client(ethClient);
+
+void setup() {
+  Ethernet.begin(mac, ip);
+  delay(1500);  // Aguarda a conexão Ethernet
+  
+  client.setServer(server, 1883);
+
+  Serial.begin(9600);
+  Serial.println(F("DHTxx test!"));
+  
+  dht.begin();
+  
+}
+
+void loop() {
+  if (!client.connected()) {
+    reconnect();
+  }
+  
+  client.loop();
+
+  // Wait a few seconds between measurements.
+  delay(1000);
+
+  // Reading temperature or humidity takes about 250 milliseconds!
+  // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
+
+  // Read temperature as Celsius (the default)
+  float t = dht.readTemperature();
+  // Read temperature as Fahrenheit (isFahrenheit = true)
+  float f = dht.readTemperature(true);
+
+
+  Serial.print(F("%  Temperature: "));
+  Serial.print(t);
+  Serial.print(F("°C "));
+  Serial.print(f);
+  Serial.println(F("°F"));
+
+  char tempStr[4];
+
+  dtostrf(t, 6, 1, tempStr);  // Converte o valor float para uma string
+  
+  client.publish(topic, tempStr);  // Publica a temperatura no tópico MQTT
+  
+  delay(5000);  // Aguarda 5 segundos antes de enviar a próxima leitura
+
+  // Check if any reads failed and exit early (to try again).
+  if (isnan(t) || isnan(f)) {
+    Serial.println(F("Failed to read from DHT sensor!"));
+    return;
+  }
+
+}
+
+void reconnect() {
+  while (!client.connected()) {
+    Serial.print("Conectando ao servidor MQTT...");
+    
+    if (client.connect(clientID)) {
+      Serial.println("conectado!");
+    } else {
+      Serial.print(" falhou, código do erro: ");
+      Serial.print(client.state());
+      Serial.println(" Tentando novamente em 10 segundos...");
+      
+      delay(10000);  // Aguarda 10 segundos antes de tentar a conexão novamente
+    }
+  }
+}
